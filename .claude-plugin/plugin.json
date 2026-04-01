@@ -1,0 +1,8 @@
+{
+  "name": "kaiten-connector",
+  "description": "Kaiten project management integration — access boards, cards, sprints, and backlog analytics from Kaiten directly in Cowork",
+  "version": "1.0.0",
+  "author": {
+    "name": "ipashintsev"
+  }
+}
