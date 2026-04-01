@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "kaiten-plugins",
+  "description": "Kaiten project management plugins",
+  "owner": {
+    "name": "ipashintsev"
+  },
+  "plugins": [
+    {
+      "name": "kaiten-connector",
+      "description": "Kaiten project management integration — access boards, cards, sprints, and backlog analytics from Kaiten directly in Cowork",
+      "source": ".."
+    }
+  ]
+}
