@@ -24,12 +24,29 @@ Remote [MCP](https://modelcontextprotocol.io/) server for [Kaiten](https://kaite
 |----------|-------------|
 | `KAITEN_HOST` | Kaiten domain, e.g. `mycompany.kaiten.ru` |
 | `KAITEN_TOKEN` | API bearer token ([get it here](https://kaiten.ru/profile/api-key)) |
-| `MCP_AUTH_TOKEN` | Shared secret for MCP client auth (optional, recommended in production) |
+| `OAUTH_CLIENT_ID` | OAuth client ID for MCP auth (optional, recommended in production) |
+| `OAUTH_CLIENT_SECRET` | OAuth client secret (generate with `openssl rand -hex 32`) |
 | `PORT` | Server port (default: `3000`) |
 
 ### Authentication
 
-When `MCP_AUTH_TOKEN` is set, all `/mcp` requests must include `Authorization: Bearer <token>` header. Without a valid token the server returns 401. If the variable is not set, auth is disabled (convenient for local development).
+The server implements OAuth 2.1 (Authorization Code + PKCE) compliant with the MCP specification.
+
+**How it works:**
+1. Client sends unauthenticated request to `/mcp`
+2. Server returns 401 with discovery metadata
+3. Client discovers authorization server via `/.well-known/oauth-protected-resource`
+4. User authorizes via consent page
+5. Client exchanges authorization code for access token (with PKCE verification)
+6. Access tokens are valid for 1 hour
+
+**Supported features:**
+- Protected Resource Metadata (RFC 9728)
+- Authorization Server Metadata (RFC 8414)
+- Dynamic Client Registration (RFC 7591)
+- PKCE with S256 challenge method
+
+If `OAUTH_CLIENT_ID` is not set, auth is disabled (convenient for local development).
 
 ### Run locally
 
@@ -50,8 +67,9 @@ KAITEN_HOST=mycompany.kaiten.ru KAITEN_TOKEN=your-token npm run dev
 
 1. Create a new project on [railway.app](https://railway.app/)
 2. Connect the GitHub repo
-3. Set environment variables: `KAITEN_HOST`, `KAITEN_TOKEN`
-4. Railway will auto-detect Node.js and run `npm install && npm run build && npm start`
+3. Set environment variables: `KAITEN_HOST`, `KAITEN_TOKEN`, `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`
+4. Generate a domain in Settings → Networking → Generate Domain
+5. Railway will auto-detect Node.js and run `npm install && npm run build && npm start`
 
 ### Deploy to Render
 
@@ -59,13 +77,14 @@ The repo includes `render.yaml` for one-click deploy on [Render](https://render.
 
 ## Connecting to Claude
 
-Once deployed, use the server URL as a Custom MCP connector:
+1. In Claude → Settings → Integrations → Add Custom Connector
+2. **Name**: `Kaiten`
+3. **URL**: `https://your-service.up.railway.app/mcp`
+4. **OAuth Client ID**: value of `OAUTH_CLIENT_ID`
+5. **OAuth Client Secret**: value of `OAUTH_CLIENT_SECRET`
+6. Click Add, then authorize when prompted
 
-```
-https://your-service.up.railway.app/mcp
-```
-
-The server uses Streamable HTTP transport (MCP spec compliant) with session management.
+The server uses Streamable HTTP transport (MCP spec compliant) with session management and OAuth 2.1 authentication.
 
 ## Tech stack
 
