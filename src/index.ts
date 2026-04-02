@@ -529,7 +529,23 @@ app.use(
   })
 );
 
-// Health check
+// Auth middleware
+const MCP_AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
+
+function requireAuth(req: Request, res: Response, next: () => void) {
+  if (!MCP_AUTH_TOKEN) {
+    // No token configured — skip auth (local dev)
+    return next();
+  }
+  const header = req.headers.authorization;
+  if (!header || header !== `Bearer ${MCP_AUTH_TOKEN}`) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  next();
+}
+
+// Health check (no auth)
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
@@ -538,7 +554,7 @@ app.get("/health", (_req, res) => {
 const transports: Record<string, StreamableHTTPServerTransport> = {};
 
 // POST /mcp — main MCP endpoint
-app.post("/mcp", async (req: Request, res: Response) => {
+app.post("/mcp", requireAuth, async (req: Request, res: Response) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
   try {
@@ -595,7 +611,7 @@ app.post("/mcp", async (req: Request, res: Response) => {
 });
 
 // GET /mcp — SSE stream
-app.get("/mcp", async (req: Request, res: Response) => {
+app.get("/mcp", requireAuth, async (req: Request, res: Response) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
   if (!sessionId || !transports[sessionId]) {
     res.status(404).send("Session not found");
@@ -605,7 +621,7 @@ app.get("/mcp", async (req: Request, res: Response) => {
 });
 
 // DELETE /mcp — session termination
-app.delete("/mcp", async (req: Request, res: Response) => {
+app.delete("/mcp", requireAuth, async (req: Request, res: Response) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
   if (!sessionId || !transports[sessionId]) {
     res.status(404).send("Session not found");

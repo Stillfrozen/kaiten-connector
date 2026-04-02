@@ -24,7 +24,12 @@ Remote [MCP](https://modelcontextprotocol.io/) server for [Kaiten](https://kaite
 |----------|-------------|
 | `KAITEN_HOST` | Kaiten domain, e.g. `mycompany.kaiten.ru` |
 | `KAITEN_TOKEN` | API bearer token ([get it here](https://kaiten.ru/profile/api-key)) |
+| `MCP_AUTH_TOKEN` | Shared secret for MCP client auth (optional, recommended in production) |
 | `PORT` | Server port (default: `3000`) |
+
+### Authentication
+
+When `MCP_AUTH_TOKEN` is set, all `/mcp` requests must include `Authorization: Bearer <token>` header. Without a valid token the server returns 401. If the variable is not set, auth is disabled (convenient for local development).
 
 ### Run locally
 
