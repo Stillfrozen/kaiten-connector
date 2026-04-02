@@ -85,18 +85,6 @@ function createServer(): McpServer {
         kaiten.getBoardLanes(board_id).catch(() => [] as kaiten.Lane[]),
       ]);
 
-      // Fetch subcolumns for each column
-      const columnsWithSubs = await Promise.all(
-        columns.map(async (col) => {
-          try {
-            const subs = await kaiten.getColumnSubcolumns(col.id);
-            return { ...col, subcolumns: subs };
-          } catch {
-            return { ...col, subcolumns: [] };
-          }
-        })
-      );
-
       return {
         content: [
           {
@@ -104,7 +92,7 @@ function createServer(): McpServer {
             text: JSON.stringify(
               {
                 board: { id: board.id, title: board.title },
-                columns: columnsWithSubs.map((c) => ({
+                columns: columns.map((c) => ({
                   id: c.id,
                   title: c.title,
                   wip_limit: c.wip_limit,
