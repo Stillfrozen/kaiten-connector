@@ -543,7 +543,12 @@ app.post("/oauth/token", oauth.token);
 
 // Health check (no auth)
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
+  res.json({
+    status: "ok",
+    has_kaiten_host: !!process.env.KAITEN_HOST,
+    has_kaiten_token: !!process.env.KAITEN_TOKEN,
+    kaiten_host_length: process.env.KAITEN_HOST?.length ?? 0,
+  });
 });
 
 // Session store
