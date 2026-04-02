@@ -1,16 +1,16 @@
-const KAITEN_HOST = process.env.KAITEN_HOST;
-const KAITEN_TOKEN = process.env.KAITEN_TOKEN;
-
-if (!KAITEN_HOST || !KAITEN_TOKEN) {
-  console.error("KAITEN_HOST and KAITEN_TOKEN environment variables are required");
-  process.exit(1);
+function getConfig() {
+  const host = process.env.KAITEN_HOST;
+  const token = process.env.KAITEN_TOKEN;
+  if (!host || !token) {
+    throw new Error("KAITEN_HOST and KAITEN_TOKEN environment variables are required");
+  }
+  return { host, token };
 }
 
-const BASE_URL = `https://${KAITEN_HOST}/api/latest`;
-
 async function api<T = unknown>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { Authorization: `Bearer ${KAITEN_TOKEN}` },
+  const { host, token } = getConfig();
+  const res = await fetch(`https://${host}/api/latest${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
     const text = await res.text();
