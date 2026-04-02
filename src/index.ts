@@ -7,6 +7,7 @@ import express from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as kaiten from "./kaiten-api.js";
+import * as oauth from "./oauth.js";
 
 // --- MCP Server factory ---
 
@@ -529,21 +530,16 @@ app.use(
   })
 );
 
-// Auth middleware
-const MCP_AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
+// Parse URL-encoded bodies (for OAuth form POST)
+app.use(express.urlencoded({ extended: false }));
 
-function requireAuth(req: Request, res: Response, next: () => void) {
-  if (!MCP_AUTH_TOKEN) {
-    // No token configured — skip auth (local dev)
-    return next();
-  }
-  const header = req.headers.authorization;
-  if (!header || header !== `Bearer ${MCP_AUTH_TOKEN}`) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  next();
-}
+// --- OAuth endpoints (no auth) ---
+app.get("/.well-known/oauth-protected-resource", oauth.protectedResourceMetadata);
+app.get("/.well-known/oauth-authorization-server", oauth.authServerMetadata);
+app.post("/oauth/register", oauth.registerClient);
+app.get("/oauth/authorize", oauth.authorize);
+app.post("/oauth/authorize", oauth.authorizeApprove);
+app.post("/oauth/token", oauth.token);
 
 // Health check (no auth)
 app.get("/health", (_req, res) => {
@@ -554,7 +550,7 @@ app.get("/health", (_req, res) => {
 const transports: Record<string, StreamableHTTPServerTransport> = {};
 
 // POST /mcp — main MCP endpoint
-app.post("/mcp", requireAuth, async (req: Request, res: Response) => {
+app.post("/mcp", oauth.requireBearerAuth, async (req: Request, res: Response) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
   try {
@@ -611,7 +607,7 @@ app.post("/mcp", requireAuth, async (req: Request, res: Response) => {
 });
 
 // GET /mcp — SSE stream
-app.get("/mcp", requireAuth, async (req: Request, res: Response) => {
+app.get("/mcp", oauth.requireBearerAuth, async (req: Request, res: Response) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
   if (!sessionId || !transports[sessionId]) {
     res.status(404).send("Session not found");
@@ -621,7 +617,7 @@ app.get("/mcp", requireAuth, async (req: Request, res: Response) => {
 });
 
 // DELETE /mcp — session termination
-app.delete("/mcp", requireAuth, async (req: Request, res: Response) => {
+app.delete("/mcp", oauth.requireBearerAuth, async (req: Request, res: Response) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
   if (!sessionId || !transports[sessionId]) {
     res.status(404).send("Session not found");
