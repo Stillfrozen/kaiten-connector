@@ -675,74 +675,7 @@ function createServer(): McpServer {
     }
   );
 
-  // 13. Get custom properties (company-level)
-  server.registerTool(
-    "get-custom-properties",
-    {
-      title: "Get Custom Properties",
-      description:
-        "Get all custom property definitions for the company. Shows property names, types, and possible values.",
-      inputSchema: z.object({
-        include_values: z.boolean().optional().default(true).describe("Include possible values for select-type properties"),
-      }),
-    },
-    async ({ include_values }) => {
-      const props = await kaiten.getCustomProperties({ include_values });
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(
-              props.map((p) => ({
-                id: p.id,
-                name: p.name,
-                type: p.type,
-                multi_select: p.multi_select,
-                condition: p.condition,
-                values: p.values?.map((v) => ({
-                  id: v.id,
-                  value: v.value,
-                  color: v.color,
-                })),
-              })),
-              null,
-              2
-            ),
-          },
-        ],
-      };
-    }
-  );
-
-  // 14. Get user roles
-  server.registerTool(
-    "get-user-roles",
-    {
-      title: "Get User Roles",
-      description: "Get all user role definitions in the company (for time tracking and card assignments).",
-      inputSchema: z.object({}),
-    },
-    async () => {
-      const roles = await kaiten.getUserRoles();
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(
-              roles.map((r) => ({
-                id: r.id,
-                name: r.name,
-              })),
-              null,
-              2
-            ),
-          },
-        ],
-      };
-    }
-  );
-
-  // 15. Search cards across all boards
+  // 13. Search cards across all boards
   server.registerTool(
     "search-cards",
     {
