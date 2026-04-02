@@ -20,15 +20,17 @@ Remote [MCP](https://modelcontextprotocol.io/) server that connects [Claude](htt
 
 ### 1. Get your Kaiten API token
 
-Go to your Kaiten profile page → API keys → create a new token. Your Kaiten domain is the part before `.kaiten.ru` in the URL (e.g. if you use `https://mycompany.kaiten.ru`, your host is `mycompany.kaiten.ru`).
+Go to your Kaiten profile page **Settings** > **API keys** > create a new token.
+
+Your Kaiten host is the full domain from your browser URL bar, e.g. `mycompany.kaiten.ru`.
 
 ### 2. Deploy to Railway
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.app/new)
 
-1. Create a new project on [railway.app](https://railway.app/) → **Deploy from GitHub Repo**
+1. Create a new project on [railway.app](https://railway.app/) > **Deploy from GitHub Repo**
 2. Connect this repo (fork it first if needed)
-3. Go to the service → **Variables** tab → add variables via **Raw Editor**:
+3. Go to the service > **Variables** tab > add variables via **Raw Editor**:
 
 ```
 KAITEN_HOST=mycompany.kaiten.ru
@@ -40,16 +42,16 @@ PORT=3000
 
 > Generate `OAUTH_CLIENT_SECRET` with: `openssl rand -hex 32`
 >
-> **Important:** do NOT wrap values in quotes — Railway treats them literally.
+> **Important:** do NOT wrap values in quotes in Raw Editor — Railway treats them literally. Write `KAITEN_HOST=mycompany.kaiten.ru`, not `KAITEN_HOST="mycompany.kaiten.ru"`.
 
-4. Go to **Settings** → **Networking** → **Generate Domain**
+4. Go to **Settings** > **Networking** > **Generate Domain**
 5. Wait for the deploy to finish
-6. Verify: open `https://your-domain.up.railway.app/health` — should return `{"status":"ok",...}`
+6. Verify: open `https://your-domain.up.railway.app/health` — should return `{"status":"ok"}`
 
 ### 3. Connect to Claude
 
-1. Open [claude.ai](https://claude.ai/) → bottom-left profile icon → **Settings**
-2. Go to **Integrations** → **Add custom connector**
+1. Open [claude.ai](https://claude.ai/) > bottom-left profile icon > **Settings**
+2. Go to **Integrations** > **Add custom connector**
 3. Fill in:
    - **Name**: `Kaiten`
    - **Remote MCP server URL**: `https://your-domain.up.railway.app/mcp`
@@ -65,6 +67,8 @@ Done! Now in any Claude chat, you can ask things like:
 - "What cards are on board 123?"
 - "Give me backlog analytics for board 456"
 - "Who's on the team?"
+
+> **Note:** after each Railway redeploy, you need to reconnect the connector in Claude (Settings > Integrations > Kaiten > Connect), because in-memory OAuth tokens are reset on restart.
 
 ### Alternative: Deploy to Render
 
@@ -94,7 +98,7 @@ The server runs on `http://localhost:3000`. Auth is disabled when `OAUTH_CLIENT_
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `KAITEN_HOST` | Yes | Kaiten domain, e.g. `mycompany.kaiten.ru` (without `https://`) |
-| `KAITEN_TOKEN` | Yes | Kaiten API token ([get it here](https://kaiten.ru/profile/api-key)) |
+| `KAITEN_TOKEN` | Yes | Kaiten API token (get from profile > API keys) |
 | `OAUTH_CLIENT_ID` | Recommended | OAuth client ID — any string, e.g. `kaiten-claude` |
 | `OAUTH_CLIENT_SECRET` | Recommended | OAuth client secret — generate with `openssl rand -hex 32` |
 | `CORS_ORIGIN` | No | Allowed CORS origin (default: `https://claude.ai`) |
@@ -106,9 +110,13 @@ The server implements [OAuth 2.1](https://oauth.net/2.1/) (Authorization Code + 
 
 - Protected Resource Metadata discovery (RFC 9728)
 - Authorization Server Metadata discovery (RFC 8414)
-- Dynamic Client Registration (RFC 7591)
+- Dynamic Client Registration (RFC 7591) — restricted in production to the pre-configured client only
 - PKCE with S256 challenge method
-- Access tokens expire after 1 hour
+- Access tokens expire after 7 days, refresh tokens after 90 days with rotation
+- Redirect URI validation at both authorization and token exchange
+- XSS protection on all HTML-rendered pages
+- CORS restricted to configured origin (default: `https://claude.ai`)
+- HTTPS required for redirect URIs (HTTP allowed only for localhost)
 
 When `OAUTH_CLIENT_ID` is not set, authentication is disabled (for local development only).
 
