@@ -97,6 +97,7 @@ The server runs on `http://localhost:3000`. Auth is disabled when `OAUTH_CLIENT_
 | `KAITEN_TOKEN` | Yes | Kaiten API token ([get it here](https://kaiten.ru/profile/api-key)) |
 | `OAUTH_CLIENT_ID` | Recommended | OAuth client ID — any string, e.g. `kaiten-claude` |
 | `OAUTH_CLIENT_SECRET` | Recommended | OAuth client secret — generate with `openssl rand -hex 32` |
+| `CORS_ORIGIN` | No | Allowed CORS origin (default: `https://claude.ai`) |
 | `PORT` | No | Server port (default: `3000`) |
 
 ## Security

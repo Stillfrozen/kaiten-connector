@@ -514,7 +514,8 @@ app.use(express.json());
 app.use(
   cors({
     exposedHeaders: ["Mcp-Session-Id", "Last-Event-Id", "Mcp-Protocol-Version"],
-    origin: "*",
+    origin: process.env.CORS_ORIGIN || "https://claude.ai",
+    credentials: true,
   })
 );
 
@@ -529,13 +530,11 @@ app.get("/oauth/authorize", oauth.authorize);
 app.post("/oauth/authorize", oauth.authorizeApprove);
 app.post("/oauth/token", oauth.token);
 
-// Health check (no auth)
+// Health check (no auth) — minimal info, no internal state
 app.get("/health", (_req, res) => {
+  const configured = !!process.env.KAITEN_HOST && !!process.env.KAITEN_TOKEN;
   res.json({
-    status: "ok",
-    has_kaiten_host: !!process.env.KAITEN_HOST,
-    has_kaiten_token: !!process.env.KAITEN_TOKEN,
-    kaiten_host_length: process.env.KAITEN_HOST?.length ?? 0,
+    status: configured ? "ok" : "misconfigured",
   });
 });
 
@@ -588,7 +587,8 @@ app.post("/mcp", oauth.requireBearerAuth, async (req: Request, res: Response) =>
 
     await transport.handleRequest(req, res, req.body);
   } catch (error) {
-    console.error("Error handling MCP request:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Error handling MCP request:", message);
     if (!res.headersSent) {
       res.status(500).json({
         jsonrpc: "2.0",

@@ -64,10 +64,25 @@ setInterval(() => {
 
 // --- Helpers ---
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function getServerUrl(req: Request): string {
   const proto = req.headers["x-forwarded-proto"] || req.protocol;
   const host = req.headers["x-forwarded-host"] || req.get("host");
   return `${proto}://${host}`;
+}
+
+function validateRedirectUri(client: RegisteredClient, redirectUri: string): boolean {
+  // If client has no registered redirect_uris, allow any (backwards compat for pre-configured client)
+  if (client.redirect_uris.length === 0) return true;
+  return client.redirect_uris.includes(redirectUri);
 }
 
 function verifyPkce(
@@ -143,8 +158,27 @@ export function authServerMetadata(req: Request, res: Response) {
   });
 }
 
-/** POST /oauth/register — Dynamic Client Registration (RFC 7591) */
+/** POST /oauth/register — Dynamic Client Registration (RFC 7591)
+ *  Restricted: only allowed when no pre-configured client exists (local dev),
+ *  or returns the pre-configured client info for matching client_name.
+ */
 export function registerClient(req: Request, res: Response) {
+  // If a pre-configured client exists, return it for any registration attempt.
+  // This allows Claude's DCR flow to work without creating new arbitrary clients.
+  if (OAUTH_CLIENT_ID && OAUTH_CLIENT_SECRET) {
+    const existing = registeredClients.get(OAUTH_CLIENT_ID);
+    if (existing) {
+      res.status(201).json({
+        client_id: existing.client_id,
+        client_secret: existing.client_secret,
+        client_name: req.body.client_name || "MCP Client",
+        redirect_uris: req.body.redirect_uris || [],
+      });
+      return;
+    }
+  }
+
+  // Only allow dynamic registration in local dev mode (no pre-configured client)
   const { client_name, redirect_uris } = req.body;
   const clientId = randomUUID();
   const clientSecret = randomUUID();
@@ -180,7 +214,8 @@ export function authorize(req: Request, res: Response) {
     return;
   }
 
-  if (!client_id || !registeredClients.has(client_id)) {
+  const client = registeredClients.get(client_id);
+  if (!client_id || !client) {
     res.status(400).send("Unknown client_id");
     return;
   }
@@ -190,7 +225,19 @@ export function authorize(req: Request, res: Response) {
     return;
   }
 
-  // Show a simple authorization page
+  // Validate redirect_uri against registered client
+  if (redirect_uri && !validateRedirectUri(client, redirect_uri)) {
+    res.status(400).send("Invalid redirect_uri for this client");
+    return;
+  }
+
+  // Show a simple authorization page (all values HTML-escaped to prevent XSS)
+  const safeClientId = escapeHtml(client_id);
+  const safeRedirectUri = escapeHtml(redirect_uri || "");
+  const safeState = escapeHtml(state || "");
+  const safeCodeChallenge = escapeHtml(code_challenge);
+  const safeCodeChallengeMethod = escapeHtml(code_challenge_method || "S256");
+
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Authorize Kaiten MCP</title>
@@ -206,11 +253,11 @@ export function authorize(req: Request, res: Response) {
   <h1>Kaiten MCP Server</h1>
   <p>Claude wants to access your Kaiten data.</p>
   <form method="POST" action="/oauth/authorize">
-    <input type="hidden" name="client_id" value="${client_id}">
-    <input type="hidden" name="redirect_uri" value="${redirect_uri || ""}">
-    <input type="hidden" name="state" value="${state || ""}">
-    <input type="hidden" name="code_challenge" value="${code_challenge}">
-    <input type="hidden" name="code_challenge_method" value="${code_challenge_method || "S256"}">
+    <input type="hidden" name="client_id" value="${safeClientId}">
+    <input type="hidden" name="redirect_uri" value="${safeRedirectUri}">
+    <input type="hidden" name="state" value="${safeState}">
+    <input type="hidden" name="code_challenge" value="${safeCodeChallenge}">
+    <input type="hidden" name="code_challenge_method" value="${safeCodeChallengeMethod}">
     <button type="submit">Authorize</button>
   </form>
 </div></body></html>`;
@@ -223,8 +270,37 @@ export function authorizeApprove(req: Request, res: Response) {
   const { client_id, redirect_uri, state, code_challenge, code_challenge_method } =
     req.body;
 
-  if (!client_id || !registeredClients.has(client_id)) {
+  const client = registeredClients.get(client_id);
+  if (!client_id || !client) {
     res.status(400).send("Unknown client_id");
+    return;
+  }
+
+  // Validate redirect_uri
+  if (!redirect_uri) {
+    res.status(400).send("redirect_uri is required");
+    return;
+  }
+
+  if (!validateRedirectUri(client, redirect_uri)) {
+    res.status(400).send("Invalid redirect_uri for this client");
+    return;
+  }
+
+  // Validate redirect_uri is a valid URL with https (or http for localhost)
+  let parsedUri: URL;
+  try {
+    parsedUri = new URL(redirect_uri);
+  } catch {
+    res.status(400).send("Invalid redirect_uri format");
+    return;
+  }
+
+  if (
+    parsedUri.protocol !== "https:" &&
+    !(parsedUri.protocol === "http:" && parsedUri.hostname === "localhost")
+  ) {
+    res.status(400).send("redirect_uri must use HTTPS (or HTTP for localhost)");
     return;
   }
 
@@ -232,16 +308,15 @@ export function authorizeApprove(req: Request, res: Response) {
   authCodes.set(code, {
     code,
     clientId: client_id,
-    redirectUri: redirect_uri || "",
+    redirectUri: redirect_uri,
     codeChallenge: code_challenge,
     codeChallengeMethod: code_challenge_method || "S256",
     expiresAt: Date.now() + 5 * 60 * 1000, // 5 min
   });
 
-  const url = new URL(redirect_uri);
-  url.searchParams.set("code", code);
-  if (state) url.searchParams.set("state", state);
-  res.redirect(url.toString());
+  parsedUri.searchParams.set("code", code);
+  if (state) parsedUri.searchParams.set("state", state);
+  res.redirect(parsedUri.toString());
 }
 
 /** POST /oauth/token — Token endpoint */
@@ -303,6 +378,16 @@ export function token(req: Request, res: Response) {
 
   if (authCode.clientId !== client_id) {
     res.status(400).json({ error: "invalid_grant" });
+    return;
+  }
+
+  // Verify redirect_uri matches the one used during authorization
+  const { redirect_uri } = req.body;
+  if (authCode.redirectUri && redirect_uri !== authCode.redirectUri) {
+    res.status(400).json({
+      error: "invalid_grant",
+      error_description: "redirect_uri mismatch",
+    });
     return;
   }
 
