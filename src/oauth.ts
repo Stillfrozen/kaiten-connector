@@ -6,6 +6,9 @@ import type { Request, Response, NextFunction } from "express";
 const OAUTH_CLIENT_ID = process.env.OAUTH_CLIENT_ID;
 const OAUTH_CLIENT_SECRET = process.env.OAUTH_CLIENT_SECRET;
 
+const ACCESS_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
+const REFRESH_TOKEN_TTL = 90 * 24 * 60 * 60; // 90 days in seconds
+
 // --- In-memory stores ---
 
 interface AuthCode {
@@ -23,6 +26,12 @@ interface Token {
   expiresAt: number;
 }
 
+interface RefreshToken {
+  refreshToken: string;
+  clientId: string;
+  expiresAt: number;
+}
+
 interface RegisteredClient {
   client_id: string;
   client_secret: string;
@@ -31,6 +40,7 @@ interface RegisteredClient {
 
 const authCodes = new Map<string, AuthCode>();
 const accessTokens = new Map<string, Token>();
+const refreshTokens = new Map<string, RefreshToken>();
 const registeredClients = new Map<string, RegisteredClient>();
 
 // Register pre-configured client
@@ -48,6 +58,8 @@ setInterval(() => {
   for (const [k, v] of authCodes) if (v.expiresAt < now) authCodes.delete(k);
   for (const [k, v] of accessTokens)
     if (v.expiresAt < now) accessTokens.delete(k);
+  for (const [k, v] of refreshTokens)
+    if (v.expiresAt < now) refreshTokens.delete(k);
 }, 60_000);
 
 // --- Helpers ---
@@ -78,6 +90,30 @@ function validateClient(
   if (!client) return null;
   if (clientSecret && client.client_secret !== clientSecret) return null;
   return client;
+}
+
+function issueTokenPair(clientId: string) {
+  const accessToken = randomUUID();
+  const refreshToken = randomUUID();
+
+  accessTokens.set(accessToken, {
+    accessToken,
+    clientId,
+    expiresAt: Date.now() + ACCESS_TOKEN_TTL * 1000,
+  });
+
+  refreshTokens.set(refreshToken, {
+    refreshToken,
+    clientId,
+    expiresAt: Date.now() + REFRESH_TOKEN_TTL * 1000,
+  });
+
+  return {
+    access_token: accessToken,
+    token_type: "Bearer",
+    expires_in: ACCESS_TOKEN_TTL,
+    refresh_token: refreshToken,
+  };
 }
 
 // --- Route handlers ---
@@ -210,9 +246,43 @@ export function authorizeApprove(req: Request, res: Response) {
 
 /** POST /oauth/token — Token endpoint */
 export function token(req: Request, res: Response) {
-  const { grant_type, code, redirect_uri, client_id, client_secret, code_verifier } =
-    req.body;
+  const {
+    grant_type,
+    code,
+    client_id,
+    client_secret,
+    code_verifier,
+    refresh_token,
+  } = req.body;
 
+  // --- Refresh token grant ---
+  if (grant_type === "refresh_token") {
+    if (!refresh_token) {
+      res.status(400).json({ error: "invalid_request", error_description: "refresh_token required" });
+      return;
+    }
+
+    const stored = refreshTokens.get(refresh_token);
+    if (!stored || stored.expiresAt < Date.now()) {
+      refreshTokens.delete(refresh_token);
+      res.status(400).json({ error: "invalid_grant", error_description: "Refresh token expired or invalid" });
+      return;
+    }
+
+    // Validate client if provided
+    if (client_id && !validateClient(client_id, client_secret)) {
+      res.status(401).json({ error: "invalid_client" });
+      return;
+    }
+
+    // Rotate: delete old refresh token, issue new pair
+    refreshTokens.delete(refresh_token);
+    const tokens = issueTokenPair(stored.clientId);
+    res.json(tokens);
+    return;
+  }
+
+  // --- Authorization code grant ---
   if (grant_type !== "authorization_code") {
     res.status(400).json({ error: "unsupported_grant_type" });
     return;
@@ -237,33 +307,32 @@ export function token(req: Request, res: Response) {
   }
 
   // Verify PKCE
-  if (!code_verifier || !verifyPkce(code_verifier, authCode.codeChallenge, authCode.codeChallengeMethod)) {
-    res.status(400).json({ error: "invalid_grant", error_description: "PKCE verification failed" });
+  if (
+    !code_verifier ||
+    !verifyPkce(code_verifier, authCode.codeChallenge, authCode.codeChallengeMethod)
+  ) {
+    res.status(400).json({
+      error: "invalid_grant",
+      error_description: "PKCE verification failed",
+    });
     return;
   }
 
   // Consume the code
   authCodes.delete(code);
 
-  // Issue token
-  const accessToken = randomUUID();
-  const expiresIn = 3600; // 1 hour
-  accessTokens.set(accessToken, {
-    accessToken,
-    clientId: client_id,
-    expiresAt: Date.now() + expiresIn * 1000,
-  });
-
-  res.json({
-    access_token: accessToken,
-    token_type: "Bearer",
-    expires_in: expiresIn,
-  });
+  // Issue token pair
+  const tokens = issueTokenPair(client_id);
+  res.json(tokens);
 }
 
 // --- Auth middleware for MCP endpoints ---
 
-export function requireBearerAuth(req: Request, res: Response, next: NextFunction) {
+export function requireBearerAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
   // If no OAuth configured at all, skip auth
   if (!OAUTH_CLIENT_ID && registeredClients.size === 0) {
     return next();
