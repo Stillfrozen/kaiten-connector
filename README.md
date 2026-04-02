@@ -16,7 +16,6 @@ Remote [MCP](https://modelcontextprotocol.io/) server that connects [Claude](htt
 | `get-card-external-links` | External links attached to a card |
 | `list-sprints` | Sprints with filtering by active status, velocity, committed points |
 | `get-sprint-cards` | Cards in a specific sprint |
-| `list-users` | Users with API-level search by name/email, pagination |
 | `get-current-user` | Currently authenticated user info |
 | `get-custom-properties` | Company custom property definitions with possible values |
 | `get-user-roles` | User role definitions (for time tracking and assignments) |

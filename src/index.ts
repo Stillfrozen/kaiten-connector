@@ -413,51 +413,7 @@ function createServer(): McpServer {
     }
   );
 
-  // 7. List users
-  server.registerTool(
-    "list-users",
-    {
-      title: "List Users",
-      description:
-        "List users from Kaiten. Search by name/email via API query parameter, or filter locally.",
-      inputSchema: z.object({
-        search: z.string().optional().describe("Search users by name or email (API-level query)"),
-        include_inactive: z.boolean().optional().describe("Include deactivated users"),
-        limit: z.number().optional().default(100).describe("Max users (max 100)"),
-        offset: z.number().optional().default(0).describe("Offset for pagination"),
-      }),
-    },
-    async ({ search, include_inactive, limit, offset }) => {
-      const users = await kaiten.getUsers({
-        query: search,
-        include_inactive,
-        limit,
-        offset,
-      });
-
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(
-              users.map((u) => ({
-                id: u.id,
-                name: u.full_name,
-                email: u.email,
-                username: u.username,
-                role: u.role, // 1=owner, 2=user, 3=deactivated
-                activated: u.activated,
-              })),
-              null,
-              2
-            ),
-          },
-        ],
-      };
-    }
-  );
-
-  // 8. Current user
+  // 7. Current user
   server.registerTool(
     "get-current-user",
     {
