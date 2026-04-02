@@ -169,11 +169,11 @@ export async function getSpaceBoards(spaceId: number): Promise<Board[]> {
 }
 
 export async function getBoard(boardId: number): Promise<Board> {
-  return api<Board>(`/board/${boardId}`);
+  return api<Board>(`/boards/${boardId}`);
 }
 
 export async function getBoardColumns(boardId: number): Promise<Column[]> {
-  return api<Column[]>(`/board/${boardId}/columns`);
+  return api<Column[]>(`/boards/${boardId}/columns`);
 }
 
 export async function getBoardLanes(boardId: number): Promise<Lane[]> {
@@ -181,7 +181,7 @@ export async function getBoardLanes(boardId: number): Promise<Lane[]> {
 }
 
 export async function getColumnSubcolumns(columnId: number): Promise<SubColumn[]> {
-  return api<SubColumn[]>(`/column/${columnId}/subcolumns`);
+  return api<SubColumn[]>(`/columns/${columnId}/subcolumns`);
 }
 
 export async function getCards(params: {
