@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: kaiten-mcp-server
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: KAITEN_HOST
+        sync: false
+      - key: KAITEN_TOKEN
+        sync: false
+      - key: PORT
+        value: 10000
