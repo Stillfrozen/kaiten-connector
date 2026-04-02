@@ -7,13 +7,19 @@ Remote [MCP](https://modelcontextprotocol.io/) server that connects [Claude](htt
 | Tool | Description |
 |------|-------------|
 | `list-boards` | List all spaces and boards, optionally filter by name |
-| `get-board` | Board structure: columns, subcolumns, lanes, WIP limits |
-| `list-cards` | Cards on a board with filters (column, member, state) |
-| `get-card` | Full card details: description, comments, checklists, blockers, children, location history |
-| `list-sprints` | All sprints with dates and status |
+| `get-board` | Board structure: columns with types and WIP limits, subcolumns, lanes |
+| `list-cards` | Cards with flexible filters: board, column, lane, member, owner, sprint, tags, state, dates, overdue, ASAP, text search |
+| `search-cards` | Search cards across all boards by text query |
+| `get-card` | Full card details: description, comments, checklists, blockers, children, parents, external links, files, time logs, custom properties, location history |
+| `get-card-blockers` | Detailed blocker info: reason, blocking card, released status, due date |
+| `get-card-time-logs` | Time tracking logs: who spent how much time, on which date, with what role |
+| `get-card-external-links` | External links attached to a card |
+| `list-sprints` | Sprints with filtering by active status, velocity, committed points |
 | `get-sprint-cards` | Cards in a specific sprint |
-| `list-users` | All users, optionally filter by name |
+| `list-users` | Users with API-level search by name/email, pagination |
 | `get-current-user` | Currently authenticated user info |
+| `get-custom-properties` | Company custom property definitions with possible values |
+| `get-user-roles` | User role definitions (for time tracking and assignments) |
 | `backlog-analytics` | Board analytics: distribution by column, blockers, workload, aging, due dates |
 
 ## Quick start
