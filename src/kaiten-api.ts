@@ -138,7 +138,7 @@ export async function getSpaces(): Promise<Space[]> {
 }
 
 export async function getSpaceBoards(spaceId: number): Promise<Board[]> {
-  return api<Board[]>(`/space/${spaceId}/boards`);
+  return api<Board[]>(`/spaces/${spaceId}/boards`);
 }
 
 export async function getBoard(boardId: number): Promise<Board> {
