@@ -64,6 +64,10 @@ interface Token {
 interface RefreshToken {
   refreshToken: string;
   clientId: string;
+  // Paired access token — invalidated when this refresh token is rotated,
+  // so a compromised access token can be killed by refreshing the chain
+  // (RFC 6819 §5.2.2.3).
+  accessToken: string;
   expiresAt: number;
 }
 
@@ -175,6 +179,7 @@ function issueTokenPair(clientId: string) {
   refreshTokens.set(refreshToken, {
     refreshToken,
     clientId,
+    accessToken,
     expiresAt: Date.now() + REFRESH_TOKEN_TTL * 1000,
   });
 
@@ -185,6 +190,14 @@ function issueTokenPair(clientId: string) {
     refresh_token: refreshToken,
   };
 }
+
+// Testing-only handles on the in-memory stores. Used by oauth.test.ts to
+// verify the rotation invariant without spinning up the HTTP layer.
+export const __testing__ = {
+  accessTokens,
+  refreshTokens,
+  issueTokenPair,
+};
 
 // --- CSRF token (binds the GET approval form to the POST) ---
 
@@ -557,12 +570,17 @@ export function token(req: Request, res: Response) {
     // Bind: refresh token must belong to the authenticated client
     if (stored.clientId !== client_id) {
       refreshTokens.delete(refresh_token);
+      accessTokens.delete(stored.accessToken);
       res.status(400).json({ error: "invalid_grant" });
       return;
     }
 
-    // Rotate: delete old refresh token, issue new pair
+    // Rotate: invalidate the old refresh token AND its paired access token,
+    // then issue a fresh pair. Killing the old access token on rotation means
+    // a compromised access token can be revoked by the owner triggering a
+    // refresh (RFC 6819 §5.2.2.3).
     refreshTokens.delete(refresh_token);
+    accessTokens.delete(stored.accessToken);
     const tokens = issueTokenPair(stored.clientId);
     res.json(tokens);
     return;

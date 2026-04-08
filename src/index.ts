@@ -26,7 +26,11 @@ function createServer(): McpServer {
       description:
         "List all spaces and boards from Kaiten. Optionally filter by name.",
       inputSchema: z.object({
-        search: z.string().optional().describe("Filter boards by name"),
+        search: z
+          .string()
+          .max(200)
+          .optional()
+          .describe("Filter boards by name"),
       }),
     },
     async ({ search }) => {
@@ -76,7 +80,7 @@ function createServer(): McpServer {
       description:
         "Get full board structure: columns with types and WIP limits, subcolumns, lanes.",
       inputSchema: z.object({
-        board_id: z.number().describe("Board ID"),
+        board_id: z.number().int().positive().describe("Board ID"),
       }),
     },
     async ({ board_id }) => {
@@ -136,24 +140,24 @@ function createServer(): McpServer {
       description:
         "List cards with flexible filters. Can filter by board, column, lane, member, owner, sprint, tags, state, dates, overdue, text search. Returns id, title, column, lane, members, tags, size, state, dates.",
       inputSchema: z.object({
-        board_id: z.number().optional().describe("Filter by board ID"),
-        column_id: z.number().optional().describe("Filter by column ID"),
-        lane_id: z.number().optional().describe("Filter by lane ID"),
-        member_id: z.number().optional().describe("Filter by member ID"),
-        owner_id: z.number().optional().describe("Filter by owner (creator) ID"),
-        sprint_id: z.number().optional().describe("Filter by sprint ID"),
-        condition: z.number().optional().describe("1=on board, 2=archived"),
-        states: z.string().optional().describe("Comma-separated states: 1=queued, 2=inProgress, 3=done"),
-        tag_ids: z.string().optional().describe("Comma-separated tag IDs"),
-        query: z.string().optional().describe("Search cards by text"),
+        board_id: z.number().int().positive().optional().describe("Filter by board ID"),
+        column_id: z.number().int().positive().optional().describe("Filter by column ID"),
+        lane_id: z.number().int().positive().optional().describe("Filter by lane ID"),
+        member_id: z.number().int().positive().optional().describe("Filter by member ID"),
+        owner_id: z.number().int().positive().optional().describe("Filter by owner (creator) ID"),
+        sprint_id: z.number().int().positive().optional().describe("Filter by sprint ID"),
+        condition: z.number().int().min(1).max(2).optional().describe("1=on board, 2=archived"),
+        states: z.string().max(50).optional().describe("Comma-separated states: 1=queued, 2=inProgress, 3=done"),
+        tag_ids: z.string().max(500).optional().describe("Comma-separated tag IDs"),
+        query: z.string().max(500).optional().describe("Search cards by text"),
         overdue: z.boolean().optional().describe("Only overdue cards"),
         asap: z.boolean().optional().describe("Only ASAP cards"),
-        due_date_before: z.string().optional().describe("Due date before (ISO 8601)"),
-        due_date_after: z.string().optional().describe("Due date after (ISO 8601)"),
-        created_after: z.string().optional().describe("Created after (ISO 8601)"),
-        updated_after: z.string().optional().describe("Updated after (ISO 8601)"),
-        limit: z.number().optional().default(50).describe("Max cards (max 100)"),
-        offset: z.number().optional().default(0).describe("Offset for pagination"),
+        due_date_before: z.string().max(64).optional().describe("Due date before (ISO 8601)"),
+        due_date_after: z.string().max(64).optional().describe("Due date after (ISO 8601)"),
+        created_after: z.string().max(64).optional().describe("Created after (ISO 8601)"),
+        updated_after: z.string().max(64).optional().describe("Updated after (ISO 8601)"),
+        limit: z.number().int().min(1).max(100).optional().default(50).describe("Max cards (max 100)"),
+        offset: z.number().int().min(0).max(100_000).optional().default(0).describe("Offset for pagination"),
       }),
     },
     async (params) => {
@@ -207,7 +211,7 @@ function createServer(): McpServer {
       description:
         "Get full card details: description, comments, checklists, blockers, children, parents, external links, files, time logs, custom properties, location history.",
       inputSchema: z.object({
-        card_id: z.number().describe("Card ID"),
+        card_id: z.number().int().positive().describe("Card ID"),
       }),
     },
     async ({ card_id }) => {
@@ -346,8 +350,8 @@ function createServer(): McpServer {
       description: "List sprints from Kaiten. Optionally filter by active status.",
       inputSchema: z.object({
         active: z.boolean().optional().describe("Filter: true=active only, false=inactive only"),
-        limit: z.number().optional().default(100).describe("Max sprints (max 100)"),
-        offset: z.number().optional().default(0).describe("Offset for pagination"),
+        limit: z.number().int().min(1).max(100).optional().default(100).describe("Max sprints (max 100)"),
+        offset: z.number().int().min(0).max(100_000).optional().default(0).describe("Offset for pagination"),
       }),
     },
     async ({ active, limit, offset }) => {
@@ -385,8 +389,8 @@ function createServer(): McpServer {
       title: "Get Sprint Cards",
       description: "Get all cards in a specific sprint.",
       inputSchema: z.object({
-        sprint_id: z.number().describe("Sprint ID"),
-        limit: z.number().optional().default(100),
+        sprint_id: z.number().int().positive().describe("Sprint ID"),
+        limit: z.number().int().min(1).max(200).optional().default(100),
       }),
     },
     async ({ sprint_id, limit }) => {
@@ -452,7 +456,7 @@ function createServer(): McpServer {
       description:
         "Analyze backlog on a board: card distribution by column, blockers, workload by member, aging, due dates.",
       inputSchema: z.object({
-        board_id: z.number().describe("Board ID"),
+        board_id: z.number().int().positive().describe("Board ID"),
       }),
     },
     async ({ board_id }) => {
@@ -574,7 +578,7 @@ function createServer(): McpServer {
       description:
         "Get detailed blocker info for a card: reason, blocking card, released status, due date.",
       inputSchema: z.object({
-        card_id: z.number().describe("Card ID"),
+        card_id: z.number().int().positive().describe("Card ID"),
       }),
     },
     async ({ card_id }) => {
@@ -611,8 +615,8 @@ function createServer(): McpServer {
       description:
         "Get time tracking logs for a card: who spent how much time, on which date, with what role.",
       inputSchema: z.object({
-        card_id: z.number().describe("Card ID"),
-        for_date: z.string().optional().describe("Filter by date (ISO 8601)"),
+        card_id: z.number().int().positive().describe("Card ID"),
+        for_date: z.string().max(64).optional().describe("Filter by date (ISO 8601)"),
       }),
     },
     async ({ card_id, for_date }) => {
@@ -652,7 +656,7 @@ function createServer(): McpServer {
       title: "Get Card External Links",
       description: "Get external links attached to a card (URLs with descriptions).",
       inputSchema: z.object({
-        card_id: z.number().describe("Card ID"),
+        card_id: z.number().int().positive().describe("Card ID"),
       }),
     },
     async ({ card_id }) => {
@@ -684,11 +688,11 @@ function createServer(): McpServer {
       description:
         "Search cards across all boards by text query. Can also filter by overdue, ASAP, date ranges.",
       inputSchema: z.object({
-        query: z.string().describe("Search text (matches title and description)"),
+        query: z.string().min(1).max(500).describe("Search text (matches title and description)"),
         overdue: z.boolean().optional().describe("Only overdue cards"),
         asap: z.boolean().optional().describe("Only ASAP cards"),
-        states: z.string().optional().describe("Comma-separated states: 1=queued, 2=inProgress, 3=done"),
-        limit: z.number().optional().default(50).describe("Max cards (max 100)"),
+        states: z.string().max(50).optional().describe("Comma-separated states: 1=queued, 2=inProgress, 3=done"),
+        limit: z.number().int().min(1).max(100).optional().default(50).describe("Max cards (max 100)"),
       }),
     },
     async ({ query, overdue, asap, states, limit }) => {
@@ -776,6 +780,11 @@ app.use(
 
 // --- Simple in-memory rate limiter (per-IP, fixed window) ---
 
+// Hard cap on unique IPs tracked simultaneously. Prevents a botnet (or a
+// misconfigured reverse proxy letting clients spoof X-Forwarded-For) from
+// growing the hit Map unboundedly and exhausting memory.
+const MAX_TRACKED_IPS = 10_000;
+
 function createRateLimiter(windowMs: number, max: number) {
   const hits = new Map<string, { count: number; reset: number }>();
   setInterval(() => {
@@ -785,6 +794,25 @@ function createRateLimiter(windowMs: number, max: number) {
   return function limiter(req: Request, res: Response, next: () => void) {
     const key = req.ip || "unknown";
     const now = Date.now();
+
+    // If the tracking table is full and this is a new key, try to reclaim
+    // space by aggressively pruning expired entries before rejecting.
+    if (hits.size >= MAX_TRACKED_IPS && !hits.has(key)) {
+      for (const [k, v] of hits) {
+        if (v.reset < now) hits.delete(k);
+        if (hits.size < MAX_TRACKED_IPS) break;
+      }
+      // Still full → refuse to track new IPs. Returning 429 fails closed:
+      // a flood can't grow state, and a legitimate client retries later.
+      if (hits.size >= MAX_TRACKED_IPS) {
+        res
+          .status(429)
+          .set("Retry-After", String(Math.ceil(windowMs / 1000)))
+          .json({ error: "rate_limited" });
+        return;
+      }
+    }
+
     const entry = hits.get(key);
     if (!entry || entry.reset < now) {
       hits.set(key, { count: 1, reset: now + windowMs });

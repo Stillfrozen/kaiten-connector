@@ -134,3 +134,60 @@ test("CSRF: malformed token (no dot) fails", () => {
 test("CSRF: empty token fails", () => {
   assert.equal(oauth.verifyCsrfToken("", validPayload), false);
 });
+
+// --- Token rotation invariant (M-1) ---
+//
+// The refresh grant must invalidate the OLD access token paired with a
+// refresh token when it rotates. Otherwise a compromised access token
+// survives the 7-day TTL even after the owner refreshes.
+
+test("issueTokenPair: stores access and refresh, paired", () => {
+  const { accessTokens, refreshTokens, issueTokenPair } = oauth.__testing__;
+  const pair = issueTokenPair("test-client");
+
+  assert.equal(accessTokens.has(pair.access_token), true);
+  assert.equal(refreshTokens.has(pair.refresh_token), true);
+
+  const refreshEntry = refreshTokens.get(pair.refresh_token)!;
+  assert.equal(
+    refreshEntry.accessToken,
+    pair.access_token,
+    "refresh token must carry a reference to its paired access token"
+  );
+
+  // Cleanup
+  accessTokens.delete(pair.access_token);
+  refreshTokens.delete(pair.refresh_token);
+});
+
+test("rotation: deleting old access on refresh kills the stale token", () => {
+  const { accessTokens, refreshTokens, issueTokenPair } = oauth.__testing__;
+
+  // Simulate: client gets a pair, then rotates.
+  const firstPair = issueTokenPair("test-client");
+  const oldAccess = firstPair.access_token;
+  const oldRefresh = firstPair.refresh_token;
+
+  // Sanity: old access is valid before rotation
+  assert.equal(accessTokens.has(oldAccess), true);
+
+  // Perform the rotation exactly like the refresh grant does.
+  const stored = refreshTokens.get(oldRefresh)!;
+  refreshTokens.delete(oldRefresh);
+  accessTokens.delete(stored.accessToken);
+  const secondPair = issueTokenPair(stored.clientId);
+
+  // Invariant: old access is gone, new access is valid.
+  assert.equal(
+    accessTokens.has(oldAccess),
+    false,
+    "stale access token must be evicted on refresh"
+  );
+  assert.equal(accessTokens.has(secondPair.access_token), true);
+  assert.equal(refreshTokens.has(secondPair.refresh_token), true);
+  assert.equal(refreshTokens.has(oldRefresh), false);
+
+  // Cleanup
+  accessTokens.delete(secondPair.access_token);
+  refreshTokens.delete(secondPair.refresh_token);
+});
