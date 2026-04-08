@@ -726,8 +726,43 @@ function createServer(): McpServer {
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 
+// --- Startup validation: fail closed on misconfiguration ---
+if (!oauth.ALLOW_UNAUTHENTICATED) {
+  if (!process.env.OAUTH_CLIENT_ID || !process.env.OAUTH_CLIENT_SECRET) {
+    console.error(
+      "FATAL: OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET are required in production. " +
+        "Set ALLOW_UNAUTHENTICATED=1 for local dev only."
+    );
+    process.exit(1);
+  }
+  if (!process.env.OWNER_PASSWORD) {
+    console.error(
+      "FATAL: OWNER_PASSWORD is required. It gates who can complete the OAuth authorize step."
+    );
+    process.exit(1);
+  }
+  if (!process.env.OAUTH_REDIRECT_URIS) {
+    console.error(
+      "FATAL: OAUTH_REDIRECT_URIS is required (comma-separated whitelist of allowed redirect URIs)."
+    );
+    process.exit(1);
+  }
+  if (!process.env.KAITEN_HOST || !process.env.KAITEN_TOKEN) {
+    console.error("FATAL: KAITEN_HOST and KAITEN_TOKEN are required.");
+    process.exit(1);
+  }
+}
+
 const app = express();
-app.use(express.json());
+
+// Trust the first reverse proxy (Railway/Render ingress). Prevents clients
+// from spoofing X-Forwarded-* headers directly.
+app.set("trust proxy", 1);
+
+// Small body limits — OAuth and MCP JSON-RPC payloads are tiny
+app.use(express.json({ limit: "256kb" }));
+app.use(express.urlencoded({ extended: false, limit: "64kb" }));
+
 app.use(
   cors({
     exposedHeaders: ["Mcp-Session-Id", "Last-Event-Id", "Mcp-Protocol-Version"],
@@ -736,16 +771,49 @@ app.use(
   })
 );
 
-// Parse URL-encoded bodies (for OAuth form POST)
-app.use(express.urlencoded({ extended: false }));
+// --- Simple in-memory rate limiter (per-IP, fixed window) ---
 
-// --- OAuth endpoints (no auth) ---
-app.get("/.well-known/oauth-protected-resource", oauth.protectedResourceMetadata);
+function createRateLimiter(windowMs: number, max: number) {
+  const hits = new Map<string, { count: number; reset: number }>();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of hits) if (v.reset < now) hits.delete(k);
+  }, windowMs).unref();
+  return function limiter(req: Request, res: Response, next: () => void) {
+    const key = req.ip || "unknown";
+    const now = Date.now();
+    const entry = hits.get(key);
+    if (!entry || entry.reset < now) {
+      hits.set(key, { count: 1, reset: now + windowMs });
+      return next();
+    }
+    entry.count++;
+    if (entry.count > max) {
+      res
+        .status(429)
+        .set("Retry-After", String(Math.ceil((entry.reset - now) / 1000)))
+        .json({ error: "rate_limited" });
+      return;
+    }
+    next();
+  };
+}
+
+// OAuth endpoints are unauthenticated and attractive to attackers — tight cap.
+const oauthLimiter = createRateLimiter(60_000, 20); // 20 req / min / IP
+// MCP endpoint is authenticated but worth limiting to prevent bearer-token abuse.
+const mcpLimiter = createRateLimiter(60_000, 120); // 120 req / min / IP
+
+// --- OAuth endpoints (no auth, but rate-limited) ---
+app.get(
+  "/.well-known/oauth-protected-resource",
+  oauth.protectedResourceMetadata
+);
 app.get("/.well-known/oauth-authorization-server", oauth.authServerMetadata);
-app.post("/oauth/register", oauth.registerClient);
-app.get("/oauth/authorize", oauth.authorize);
-app.post("/oauth/authorize", oauth.authorizeApprove);
-app.post("/oauth/token", oauth.token);
+app.post("/oauth/register", oauthLimiter, oauth.registerClient);
+app.get("/oauth/authorize", oauthLimiter, oauth.authorize);
+app.post("/oauth/authorize", oauthLimiter, oauth.authorizeApprove);
+app.post("/oauth/token", oauthLimiter, oauth.token);
 
 // Health check (no auth) — minimal info, no internal state
 app.get("/health", (_req, res) => {
@@ -755,11 +823,16 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// Session store
+// Session store — capped to prevent unbounded memory growth from stuck sessions.
+const MAX_SESSIONS = 256;
 const transports: Record<string, StreamableHTTPServerTransport> = {};
 
 // POST /mcp — main MCP endpoint
-app.post("/mcp", oauth.requireBearerAuth, async (req: Request, res: Response) => {
+app.post(
+  "/mcp",
+  mcpLimiter,
+  oauth.requireBearerAuth,
+  async (req: Request, res: Response) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
   try {
@@ -768,6 +841,17 @@ app.post("/mcp", oauth.requireBearerAuth, async (req: Request, res: Response) =>
     if (sessionId && transports[sessionId]) {
       transport = transports[sessionId];
     } else if (!sessionId && isInitializeRequest(req.body)) {
+      // Cap concurrent sessions — prevents a flood of init requests from
+      // exhausting server memory.
+      if (Object.keys(transports).length >= MAX_SESSIONS) {
+        res.status(503).json({
+          jsonrpc: "2.0",
+          error: { code: -32000, message: "Too many sessions" },
+          id: null,
+        });
+        return;
+      }
+
       transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sid) => {
@@ -814,27 +898,38 @@ app.post("/mcp", oauth.requireBearerAuth, async (req: Request, res: Response) =>
       });
     }
   }
-});
+  }
+);
 
 // GET /mcp — SSE stream
-app.get("/mcp", oauth.requireBearerAuth, async (req: Request, res: Response) => {
-  const sessionId = req.headers["mcp-session-id"] as string | undefined;
-  if (!sessionId || !transports[sessionId]) {
-    res.status(404).send("Session not found");
-    return;
+app.get(
+  "/mcp",
+  mcpLimiter,
+  oauth.requireBearerAuth,
+  async (req: Request, res: Response) => {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    if (!sessionId || !transports[sessionId]) {
+      res.status(404).send("Session not found");
+      return;
+    }
+    await transports[sessionId].handleRequest(req, res);
   }
-  await transports[sessionId].handleRequest(req, res);
-});
+);
 
 // DELETE /mcp — session termination
-app.delete("/mcp", oauth.requireBearerAuth, async (req: Request, res: Response) => {
-  const sessionId = req.headers["mcp-session-id"] as string | undefined;
-  if (!sessionId || !transports[sessionId]) {
-    res.status(404).send("Session not found");
-    return;
+app.delete(
+  "/mcp",
+  mcpLimiter,
+  oauth.requireBearerAuth,
+  async (req: Request, res: Response) => {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    if (!sessionId || !transports[sessionId]) {
+      res.status(404).send("Session not found");
+      return;
+    }
+    await transports[sessionId].handleRequest(req, res);
   }
-  await transports[sessionId].handleRequest(req, res);
-});
+);
 
 app.listen(PORT, () => {
   console.log(`Kaiten MCP server listening on port ${PORT}`);

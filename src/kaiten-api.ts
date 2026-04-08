@@ -4,23 +4,36 @@ function getConfig() {
   if (!host || !token) {
     throw new Error("KAITEN_HOST and KAITEN_TOKEN environment variables are required");
   }
+  // Defense in depth: KAITEN_HOST is used as URL host — reject anything that
+  // could smuggle a scheme, path, or authority segment.
+  if (!/^[a-z0-9.-]+$/i.test(host)) {
+    throw new Error("KAITEN_HOST must be a plain hostname (e.g. mycompany.kaiten.ru)");
+  }
   return { host, token };
 }
 
-// Simple rate limiter: max 5 requests per second
-let lastRequestTime = 0;
+// Serialized throttle: max 5 requests per second, globally across all callers.
+// A single mutex chain ensures concurrent api() calls don't all read the same
+// stale `lastRequestTime` and burst through the limit.
 const MIN_INTERVAL_MS = 200; // 200ms between requests = 5 req/s
+let throttleChain: Promise<void> = Promise.resolve();
+
+async function throttle(): Promise<void> {
+  const next = throttleChain.then(async () => {
+    await new Promise((r) => setTimeout(r, MIN_INTERVAL_MS));
+  });
+  // Chain all future throttle() calls behind this one.
+  throttleChain = next.catch(() => {});
+  return next;
+}
 
 async function api<T = unknown>(path: string): Promise<T> {
   const { host, token } = getConfig();
+  const url = `https://${host}/api/latest${path}`;
 
-  // Throttle requests
-  const now = Date.now();
-  const wait = MIN_INTERVAL_MS - (now - lastRequestTime);
-  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  lastRequestTime = Date.now();
+  await throttle();
 
-  const res = await fetch(`https://${host}/api/latest${path}`, {
+  const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -28,20 +41,18 @@ async function api<T = unknown>(path: string): Promise<T> {
   if (res.status === 429) {
     const retryAfter = parseInt(res.headers.get("retry-after") || "2", 10);
     await new Promise((r) => setTimeout(r, retryAfter * 1000));
-    lastRequestTime = Date.now();
-    const retry = await fetch(`https://${host}/api/latest${path}`, {
+    await throttle();
+    const retry = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!retry.ok) {
-      const text = await retry.text();
-      throw new Error(`Kaiten API ${retry.status}: ${text}`);
+      throw new Error(`Kaiten API ${retry.status}`);
     }
     return retry.json() as Promise<T>;
   }
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Kaiten API ${res.status}: ${text}`);
+    throw new Error(`Kaiten API ${res.status}`);
   }
   return res.json() as Promise<T>;
 }

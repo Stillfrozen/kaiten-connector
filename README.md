@@ -40,12 +40,20 @@ KAITEN_HOST=mycompany.kaiten.ru
 KAITEN_TOKEN=your-kaiten-api-token
 OAUTH_CLIENT_ID=kaiten-claude
 OAUTH_CLIENT_SECRET=generate-a-long-random-string
+OWNER_PASSWORD=set-a-strong-password
+OAUTH_REDIRECT_URIS=https://claude.ai/api/mcp/auth_callback
 PORT=3000
 ```
 
 > Generate `OAUTH_CLIENT_SECRET` with: `openssl rand -hex 32`
 >
+> Generate `OWNER_PASSWORD` with: `openssl rand -base64 24` (or pick a long passphrase you can remember — you'll type it each time you reconnect Claude).
+>
+> `OAUTH_REDIRECT_URIS` is a comma-separated whitelist of allowed OAuth callback URIs. For Claude custom connectors, use `https://claude.ai/api/mcp/auth_callback`. If Claude shows a different URI during the authorize flow, add it here and redeploy.
+>
 > **Important:** do NOT wrap values in quotes in Raw Editor — Railway treats them literally. Write `KAITEN_HOST=mycompany.kaiten.ru`, not `KAITEN_HOST="mycompany.kaiten.ru"`.
+>
+> **The server will refuse to start** if any of `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `OWNER_PASSWORD`, `OAUTH_REDIRECT_URIS`, `KAITEN_HOST`, or `KAITEN_TOKEN` is missing. This is intentional — it prevents an accidentally-misconfigured instance from running with authentication disabled.
 
 4. Go to **Settings** > **Networking** > **Generate Domain**
 5. Wait for the deploy to finish
@@ -63,15 +71,13 @@ PORT=3000
      - **OAuth Client Secret**: same value as your `OAUTH_CLIENT_SECRET`
 4. Click **Add**
 5. Click **Connect** next to the new connector — a consent page will open
-6. Click **Authorize** — you'll be redirected back to Claude
+6. **Enter your `OWNER_PASSWORD`** on the consent page, then click **Authorize** — you'll be redirected back to Claude
 
 Done! Now in any Claude chat, you can ask things like:
 - "Show my Kaiten boards"
 - "What cards are on board 123?"
 - "Give me backlog analytics for board 456"
 - "Who's on the team?"
-
-> **Note:** after each Railway redeploy, you need to reconnect the connector in Claude (Settings > Integrations > Kaiten > Connect), because in-memory OAuth tokens are reset on restart.
 
 ### Alternative: Deploy to Render
 
@@ -85,27 +91,38 @@ cd kaiten-connector
 npm install
 npm run build
 
-KAITEN_HOST=mycompany.kaiten.ru KAITEN_TOKEN=your-token npm start
+# Local dev (unauthenticated — explicit opt-in)
+ALLOW_UNAUTHENTICATED=1 \
+KAITEN_HOST=mycompany.kaiten.ru \
+KAITEN_TOKEN=your-token \
+npm start
 ```
 
 For development with auto-reload:
 
 ```bash
-KAITEN_HOST=mycompany.kaiten.ru KAITEN_TOKEN=your-token npm run dev
+ALLOW_UNAUTHENTICATED=1 \
+KAITEN_HOST=mycompany.kaiten.ru \
+KAITEN_TOKEN=your-token \
+npm run dev
 ```
 
-The server runs on `http://localhost:3000`. Auth is disabled when `OAUTH_CLIENT_ID` is not set.
+The server runs on `http://localhost:3000`. `ALLOW_UNAUTHENTICATED=1` is an **explicit opt-in** — without it the server refuses to start unless all production env vars are present. This is intentional, to prevent a deployment from silently running with auth disabled.
 
 ## Environment variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `KAITEN_HOST` | Yes | Kaiten domain, e.g. `mycompany.kaiten.ru` (without `https://`) |
+| Variable | Required in prod | Description |
+|----------|------------------|-------------|
+| `KAITEN_HOST` | Yes | Kaiten domain, e.g. `mycompany.kaiten.ru` (without `https://`, no path) |
 | `KAITEN_TOKEN` | Yes | Kaiten API token (get from profile > API keys) |
-| `OAUTH_CLIENT_ID` | Recommended | OAuth client ID — any string, e.g. `kaiten-claude` |
-| `OAUTH_CLIENT_SECRET` | Recommended | OAuth client secret — generate with `openssl rand -hex 32` |
+| `OAUTH_CLIENT_ID` | Yes | OAuth client ID — any string, e.g. `kaiten-claude` |
+| `OAUTH_CLIENT_SECRET` | Yes | OAuth client secret — generate with `openssl rand -hex 32` |
+| `OWNER_PASSWORD` | Yes | Password you type on the consent page to approve each OAuth flow. Without this anyone who knows the URL could mint tokens. Generate with `openssl rand -base64 24` |
+| `OAUTH_REDIRECT_URIS` | Yes | Comma-separated whitelist of allowed callback URIs, e.g. `https://claude.ai/api/mcp/auth_callback` |
+| `PUBLIC_HOSTNAME` | Recommended | Public hostname used to build metadata URLs (defaults to `RAILWAY_PUBLIC_DOMAIN` / `RENDER_EXTERNAL_HOSTNAME` if set by the platform). Prevents Host header injection. |
 | `CORS_ORIGIN` | No | Allowed CORS origin (default: `https://claude.ai`) |
 | `PORT` | No | Server port (default: `3000`) |
+| `ALLOW_UNAUTHENTICATED` | No | Set to `1` to skip auth entirely. **Local dev only.** |
 
 ## Security
 
@@ -113,17 +130,28 @@ The server implements [OAuth 2.1](https://oauth.net/2.1/) (Authorization Code + 
 
 - Protected Resource Metadata discovery (RFC 9728)
 - Authorization Server Metadata discovery (RFC 8414)
-- Dynamic Client Registration (RFC 7591) — restricted in production to the pre-configured client only
-- PKCE with S256 challenge method
-- Access tokens expire after 7 days, refresh tokens after 90 days with rotation
-- Redirect URI validation at both authorization and token exchange
-- XSS protection on all HTML-rendered pages
-- CORS restricted to configured origin (default: `https://claude.ai`)
-- HTTPS required for redirect URIs (HTTP allowed only for localhost)
-
-When `OAUTH_CLIENT_ID` is not set, authentication is disabled (for local development only).
+- Dynamic Client Registration (RFC 7591) — **disabled in production**; operators configure pre-shared client credentials manually in Claude's connector UI
+- PKCE with S256 challenge method only (server rejects `plain` and any other method — no downgrade)
+- Access tokens expire after 7 days, refresh tokens after 90 days with rotation; refresh grant always requires client authentication (RFC 6749 §6)
+- **Owner password gate** (`OWNER_PASSWORD`): the authorize page requires the operator to enter the password before a code is issued. This is the only thing that prevents a stranger who knows the URL from minting themselves an access token.
+- **Redirect URI whitelist** (`OAUTH_REDIRECT_URIS`): only URIs from the env whitelist are accepted at both `/oauth/authorize` and `/oauth/token`. No "allow any" fallback.
+- **CSRF protection** on the POST approval step: HMAC token bound to every OAuth param, 10-min expiry — blocks external pages from auto-submitting a crafted approval form.
+- **Host header injection protection**: metadata URLs are built from `PUBLIC_HOSTNAME` (or `RAILWAY_PUBLIC_DOMAIN` / `RENDER_EXTERNAL_HOSTNAME`), not from the request's `Host` header.
+- **Fail-closed on misconfig**: if critical env vars are missing, the server refuses to start rather than silently running with auth disabled.
+- **Rate limiting**: 20 req/min/IP on all `/oauth/*` endpoints, 120 req/min/IP on `/mcp`.
+- **Session cap**: max 256 concurrent MCP sessions, prevents memory exhaustion.
+- **Authorization code is invalidated on any failed exchange** (PKCE failure, client mismatch, redirect_uri mismatch) — no retry attacks.
+- **Constant-time comparisons** for `client_secret`, CSRF signatures, and `OWNER_PASSWORD`.
+- XSS protection on all HTML-rendered pages (hidden form fields, error messages).
+- CORS restricted to configured origin (default: `https://claude.ai`).
+- HTTPS required for redirect URIs (HTTP allowed only for localhost).
+- Error messages from the upstream Kaiten API are not forwarded to the client — only HTTP status codes, to avoid leaking any PII or tokens from upstream response bodies.
 
 Your Kaiten API token is stored only on the server — Claude never sees it. Claude authenticates via OAuth and only gets a time-limited access token.
+
+### Reconnection after redeploy
+
+The in-memory token store is cleared on every restart. After any Railway redeploy, go to Claude > Settings > Integrations > Kaiten > **Connect** again and re-enter your `OWNER_PASSWORD` on the consent page.
 
 ## Tech stack
 
