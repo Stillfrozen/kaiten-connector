@@ -1,6 +1,8 @@
+import { env } from "./env.js";
+
 function getConfig() {
-  const host = process.env.KAITEN_HOST;
-  const token = process.env.KAITEN_TOKEN;
+  const host = env("KAITEN_HOST");
+  const token = env("KAITEN_TOKEN");
   if (!host || !token) {
     throw new Error("KAITEN_HOST and KAITEN_TOKEN environment variables are required");
   }

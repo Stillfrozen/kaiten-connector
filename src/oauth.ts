@@ -6,29 +6,32 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
+import { env, stripSurroundingQuotes } from "./env.js";
 
 // --- Config ---
 
-const OAUTH_CLIENT_ID = process.env.OAUTH_CLIENT_ID;
-const OAUTH_CLIENT_SECRET = process.env.OAUTH_CLIENT_SECRET;
-const OWNER_PASSWORD = process.env.OWNER_PASSWORD;
+const OAUTH_CLIENT_ID = env("OAUTH_CLIENT_ID");
+const OAUTH_CLIENT_SECRET = env("OAUTH_CLIENT_SECRET");
+const OWNER_PASSWORD = env("OWNER_PASSWORD");
 
 // Whitelist of allowed redirect URIs (comma-separated). Required in production.
-const OAUTH_REDIRECT_URIS = (process.env.OAUTH_REDIRECT_URIS || "")
+// Each item is also stripped of surrounding quotes in case Railway wrapped
+// them individually.
+const OAUTH_REDIRECT_URIS = (env("OAUTH_REDIRECT_URIS") || "")
   .split(",")
-  .map((s) => s.trim())
+  .map((s) => stripSurroundingQuotes(s.trim()))
   .filter(Boolean);
 
 // Public hostname for building metadata URLs (prevents Host header injection).
 // Railway and Render set these automatically; operator can override.
 const PUBLIC_HOSTNAME =
-  process.env.PUBLIC_HOSTNAME ||
-  process.env.RAILWAY_PUBLIC_DOMAIN ||
-  process.env.RENDER_EXTERNAL_HOSTNAME ||
+  env("PUBLIC_HOSTNAME") ||
+  env("RAILWAY_PUBLIC_DOMAIN") ||
+  env("RENDER_EXTERNAL_HOSTNAME") ||
   "";
 
 // Explicit opt-in to skip all authentication (local development only).
-export const ALLOW_UNAUTHENTICATED = process.env.ALLOW_UNAUTHENTICATED === "1";
+export const ALLOW_UNAUTHENTICATED = env("ALLOW_UNAUTHENTICATED") === "1";
 
 const ACCESS_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 const REFRESH_TOKEN_TTL = 90 * 24 * 60 * 60; // 90 days in seconds

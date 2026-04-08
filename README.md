@@ -51,7 +51,7 @@ PORT=3000
 >
 > `OAUTH_REDIRECT_URIS` is a comma-separated whitelist of allowed OAuth callback URIs. For Claude custom connectors, use `https://claude.ai/api/mcp/auth_callback`. If Claude shows a different URI during the authorize flow, add it here and redeploy.
 >
-> **Important:** do NOT wrap values in quotes in Raw Editor — Railway treats them literally. Write `KAITEN_HOST=mycompany.kaiten.ru`, not `KAITEN_HOST="mycompany.kaiten.ru"`.
+> **Raw Editor quirk:** Railway stores values literally, including any surrounding quotes you paste. The server defensively strips a matching pair of outer single/double quotes from every env var, so both `KAITEN_HOST=mycompany.kaiten.ru` and `KAITEN_HOST="mycompany.kaiten.ru"` work. Unquoted form is still recommended (fewer surprises in downstream tooling).
 >
 > **The server will refuse to start** if any of `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `OWNER_PASSWORD`, `OAUTH_REDIRECT_URIS`, `KAITEN_HOST`, or `KAITEN_TOKEN` is missing. This is intentional — it prevents an accidentally-misconfigured instance from running with authentication disabled.
 

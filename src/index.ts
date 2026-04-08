@@ -8,6 +8,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import * as kaiten from "./kaiten-api.js";
 import * as oauth from "./oauth.js";
+import { env } from "./env.js";
 
 // --- MCP Server factory ---
 
@@ -724,30 +725,32 @@ function createServer(): McpServer {
 
 // --- HTTP Transport setup ---
 
-const PORT = parseInt(process.env.PORT ?? "3000", 10);
+const PORT = parseInt(env("PORT") ?? "3000", 10);
 
 // --- Startup validation: fail closed on misconfiguration ---
+// All reads go through env() so Railway's surrounding-quote habit is absorbed
+// instead of silently passing the check with a non-empty `"foo"` string.
 if (!oauth.ALLOW_UNAUTHENTICATED) {
-  if (!process.env.OAUTH_CLIENT_ID || !process.env.OAUTH_CLIENT_SECRET) {
+  if (!env("OAUTH_CLIENT_ID") || !env("OAUTH_CLIENT_SECRET")) {
     console.error(
       "FATAL: OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET are required in production. " +
         "Set ALLOW_UNAUTHENTICATED=1 for local dev only."
     );
     process.exit(1);
   }
-  if (!process.env.OWNER_PASSWORD) {
+  if (!env("OWNER_PASSWORD")) {
     console.error(
       "FATAL: OWNER_PASSWORD is required. It gates who can complete the OAuth authorize step."
     );
     process.exit(1);
   }
-  if (!process.env.OAUTH_REDIRECT_URIS) {
+  if (!env("OAUTH_REDIRECT_URIS")) {
     console.error(
       "FATAL: OAUTH_REDIRECT_URIS is required (comma-separated whitelist of allowed redirect URIs)."
     );
     process.exit(1);
   }
-  if (!process.env.KAITEN_HOST || !process.env.KAITEN_TOKEN) {
+  if (!env("KAITEN_HOST") || !env("KAITEN_TOKEN")) {
     console.error("FATAL: KAITEN_HOST and KAITEN_TOKEN are required.");
     process.exit(1);
   }
@@ -766,7 +769,7 @@ app.use(express.urlencoded({ extended: false, limit: "64kb" }));
 app.use(
   cors({
     exposedHeaders: ["Mcp-Session-Id", "Last-Event-Id", "Mcp-Protocol-Version"],
-    origin: process.env.CORS_ORIGIN || "https://claude.ai",
+    origin: env("CORS_ORIGIN") || "https://claude.ai",
     credentials: true,
   })
 );
@@ -817,7 +820,7 @@ app.post("/oauth/token", oauthLimiter, oauth.token);
 
 // Health check (no auth) — minimal info, no internal state
 app.get("/health", (_req, res) => {
-  const configured = !!process.env.KAITEN_HOST && !!process.env.KAITEN_TOKEN;
+  const configured = !!env("KAITEN_HOST") && !!env("KAITEN_TOKEN");
   res.json({
     status: configured ? "ok" : "misconfigured",
   });
