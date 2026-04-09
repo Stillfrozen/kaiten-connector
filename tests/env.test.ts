@@ -75,8 +75,8 @@ test("env: undefined when unset", () => {
 });
 
 test("env: strips Railway-style double quotes", () => {
-  withEnv('"qiwi.kaiten.ru"', () => {
-    assert.equal(env(TEST_KEY), "qiwi.kaiten.ru");
+  withEnv('"mycompany.kaiten.ru"', () => {
+    assert.equal(env(TEST_KEY), "mycompany.kaiten.ru");
   });
 });
 

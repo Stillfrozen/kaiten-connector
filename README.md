@@ -143,6 +143,7 @@ The server implements [OAuth 2.1](https://oauth.net/2.1/) (Authorization Code + 
 - **Authorization code is invalidated on any failed exchange** (PKCE failure, client mismatch, redirect_uri mismatch) — no retry attacks.
 - **Constant-time comparisons** for `client_secret`, CSRF signatures, and `OWNER_PASSWORD`.
 - XSS protection on all HTML-rendered pages (hidden form fields, error messages).
+- **Baseline security headers** on every response: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `x-powered-by` disabled. The OAuth consent page additionally ships `Cache-Control: no-store` and a strict Content-Security-Policy.
 - CORS restricted to configured origin (default: `https://claude.ai`).
 - HTTPS required for redirect URIs (HTTP allowed only for localhost).
 - Error messages from the upstream Kaiten API are not forwarded to the client — only HTTP status codes, to avoid leaking any PII or tokens from upstream response bodies.
