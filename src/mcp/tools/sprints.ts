@@ -36,8 +36,8 @@ function registerListSprints(server: McpServer): void {
       description: "List sprints from Kaiten. Optionally filter by active status.",
       inputSchema: z.object({
         active: z.boolean().optional().describe("Filter: true=active only, false=inactive only"),
-        limit: z.number().int().min(1).max(100).optional().default(100).describe("Max sprints (max 100)"),
-        offset: z.number().int().min(0).max(100_000).optional().default(0).describe("Offset for pagination"),
+        limit: z.coerce.number().int().min(1).max(100).optional().default(100).describe("Max sprints (max 100)"),
+        offset: z.coerce.number().int().min(0).max(100_000).optional().default(0).describe("Offset for pagination"),
       }),
     },
     async ({ active, limit, offset }) => {
@@ -54,8 +54,8 @@ function registerGetSprintCards(server: McpServer): void {
       title: "Get Sprint Cards",
       description: "Get all cards in a specific sprint.",
       inputSchema: z.object({
-        sprint_id: z.number().int().positive().describe("Sprint ID"),
-        limit: z.number().int().min(1).max(200).optional().default(100),
+        sprint_id: z.coerce.number().int().positive().describe("Sprint ID"),
+        limit: z.coerce.number().int().min(1).max(200).optional().default(100),
       }),
     },
     async ({ sprint_id, limit }) => {

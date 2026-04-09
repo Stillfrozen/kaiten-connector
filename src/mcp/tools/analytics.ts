@@ -117,7 +117,7 @@ export function registerAnalyticsTools(server: McpServer): void {
       description:
         "Analyze backlog on a board: card distribution by column, blockers, workload by member, aging, due dates.",
       inputSchema: z.object({
-        board_id: z.number().int().positive().describe("Board ID"),
+        board_id: z.coerce.number().int().positive().describe("Board ID"),
       }),
     },
     async ({ board_id }) => {

@@ -99,7 +99,7 @@ function registerGetBoard(server: McpServer): void {
       description:
         "Get full board structure: columns with types and WIP limits, subcolumns, lanes.",
       inputSchema: z.object({
-        board_id: z.number().int().positive().describe("Board ID"),
+        board_id: z.coerce.number().int().positive().describe("Board ID"),
       }),
     },
     async ({ board_id }) => {

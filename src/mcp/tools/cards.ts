@@ -46,14 +46,18 @@ function shapeSearchRow(c: kaiten.Card) {
   };
 }
 
+// z.coerce.number() used everywhere because the MCP harness serializes
+// numeric arguments as strings (JSON arguments are string-typed by the
+// cowork transport). Plain z.number() would reject "45230" with
+// `expected number, received string`.
 const listCardsSchema = z.object({
-  board_id: z.number().int().positive().optional().describe("Filter by board ID"),
-  column_id: z.number().int().positive().optional().describe("Filter by column ID"),
-  lane_id: z.number().int().positive().optional().describe("Filter by lane ID"),
-  member_id: z.number().int().positive().optional().describe("Filter by member ID"),
-  owner_id: z.number().int().positive().optional().describe("Filter by owner (creator) ID"),
-  sprint_id: z.number().int().positive().optional().describe("Filter by sprint ID"),
-  condition: z.number().int().min(1).max(2).optional().describe("1=on board, 2=archived"),
+  board_id: z.coerce.number().int().positive().optional().describe("Filter by board ID"),
+  column_id: z.coerce.number().int().positive().optional().describe("Filter by column ID"),
+  lane_id: z.coerce.number().int().positive().optional().describe("Filter by lane ID"),
+  member_id: z.coerce.number().int().positive().optional().describe("Filter by member ID"),
+  owner_id: z.coerce.number().int().positive().optional().describe("Filter by owner (creator) ID"),
+  sprint_id: z.coerce.number().int().positive().optional().describe("Filter by sprint ID"),
+  condition: z.coerce.number().int().min(1).max(2).optional().describe("1=on board, 2=archived"),
   states: z.string().max(50).optional().describe("Comma-separated states: 1=queued, 2=inProgress, 3=done"),
   tag_ids: z.string().max(500).optional().describe("Comma-separated tag IDs"),
   query: z.string().max(500).optional().describe("Search cards by text"),
@@ -63,8 +67,8 @@ const listCardsSchema = z.object({
   due_date_after: z.string().max(64).optional().describe("Due date after (ISO 8601)"),
   created_after: z.string().max(64).optional().describe("Created after (ISO 8601)"),
   updated_after: z.string().max(64).optional().describe("Updated after (ISO 8601)"),
-  limit: z.number().int().min(1).max(100).optional().default(50).describe("Max cards (max 100)"),
-  offset: z.number().int().min(0).max(100_000).optional().default(0).describe("Offset for pagination"),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50).describe("Max cards (max 100)"),
+  offset: z.coerce.number().int().min(0).max(100_000).optional().default(0).describe("Offset for pagination"),
 });
 
 const searchCardsSchema = z.object({
@@ -72,7 +76,7 @@ const searchCardsSchema = z.object({
   overdue: z.boolean().optional().describe("Only overdue cards"),
   asap: z.boolean().optional().describe("Only ASAP cards"),
   states: z.string().max(50).optional().describe("Comma-separated states: 1=queued, 2=inProgress, 3=done"),
-  limit: z.number().int().min(1).max(100).optional().default(50).describe("Max cards (max 100)"),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50).describe("Max cards (max 100)"),
 });
 
 function registerListCards(server: McpServer): void {

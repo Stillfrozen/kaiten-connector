@@ -167,7 +167,7 @@ function registerGetCard(server: McpServer): void {
       description:
         "Get full card details: description, comments, checklists, blockers, children, parents, external links, files, time logs, custom properties, location history.",
       inputSchema: z.object({
-        card_id: z.number().int().positive().describe("Card ID"),
+        card_id: z.coerce.number().int().positive().describe("Card ID"),
       }),
     },
     async ({ card_id }) => {
@@ -209,7 +209,7 @@ function registerGetCardBlockers(server: McpServer): void {
       description:
         "Get detailed blocker info for a card: reason, blocking card, released status, due date.",
       inputSchema: z.object({
-        card_id: z.number().int().positive().describe("Card ID"),
+        card_id: z.coerce.number().int().positive().describe("Card ID"),
       }),
     },
     async ({ card_id }) => {
@@ -238,7 +238,7 @@ function registerGetCardTimeLogs(server: McpServer): void {
       description:
         "Get time tracking logs for a card: who spent how much time, on which date, with what role.",
       inputSchema: z.object({
-        card_id: z.number().int().positive().describe("Card ID"),
+        card_id: z.coerce.number().int().positive().describe("Card ID"),
         for_date: z.string().max(64).optional().describe("Filter by date (ISO 8601)"),
       }),
     },
@@ -262,7 +262,7 @@ function registerGetCardExternalLinks(server: McpServer): void {
       title: "Get Card External Links",
       description: "Get external links attached to a card (URLs with descriptions).",
       inputSchema: z.object({
-        card_id: z.number().int().positive().describe("Card ID"),
+        card_id: z.coerce.number().int().positive().describe("Card ID"),
       }),
     },
     async ({ card_id }) => {
