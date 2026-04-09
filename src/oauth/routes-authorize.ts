@@ -74,10 +74,16 @@ function validateAuthorizeParams(
 }
 
 // Strict CSP + no-store for the approval page. The page only references inline
-// CSS and submits back to the same origin, so `'self'` + `'unsafe-inline'` for
-// styles is the tightest policy that still renders.
+// CSS and submits back to the same origin, so `'unsafe-inline'` for styles is
+// the tightest policy that still renders.
+//
+// NOTE: `form-action` is intentionally NOT set. The browser applies it to the
+// 302 *following* a form submit, which would block our redirect back to the
+// client's `redirect_uri` (e.g. `https://claude.ai/api/mcp/auth_callback`).
+// The real defense against malicious redirects is the exact-match whitelist in
+// `validateRedirectUri()` — enforced at both /authorize and /token.
 const AUTHORIZE_PAGE_CSP =
-  "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+  "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'";
 
 function sendAuthorizePage(res: Response, status: number, html: string): void {
   res
