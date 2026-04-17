@@ -13,10 +13,11 @@ export function registerUserTools(server: McpServer): void {
     },
     async () => {
       const user = await kaiten.getCurrentUser();
+      // PRIVACY: full_name and email are PII; role (object or string) is
+      // kept because it's a permission tier, not identity. This endpoint
+      // exists mainly as an auth smoke-test — the id is enough for that.
       return textResult({
         id: user.id,
-        name: user.full_name,
-        email: user.email,
         role: user.role,
       });
     }

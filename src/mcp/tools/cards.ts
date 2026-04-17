@@ -14,8 +14,9 @@ function shapeCardRow(c: kaiten.Card) {
     board_id: c.board_id,
     state: c.state, // 1=queued, 2=inProgress, 3=done
     condition: c.condition, // 1=active, 2=archived
+    // PRIVACY: full names stripped; stable ids only.
     members:
-      c.members?.map((m) => ({ name: m.full_name, type: m.type })) ?? [],
+      c.members?.map((m) => ({ id: m.id, type: m.type })) ?? [],
     tags: c.tags?.map((t) => t.name) ?? [],
     size: c.size,
     asap: c.asap,
@@ -40,7 +41,8 @@ function shapeSearchRow(c: kaiten.Card) {
     board: c.board?.title ?? c.board_id,
     column: c.column?.title ?? c.column_id,
     state: c.state,
-    members: c.members?.map((m) => m.full_name) ?? [],
+    // PRIVACY: full names stripped; stable ids only.
+    members: c.members?.map((m) => m.id) ?? [],
     due_date: c.due_date,
     updated: c.updated,
   };

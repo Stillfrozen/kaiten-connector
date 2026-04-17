@@ -3,15 +3,18 @@ import { z } from "zod";
 import * as kaiten from "../../kaiten-api.js";
 import { textResult } from "../shape.js";
 
+// PRIVACY: `description` and `owner.full_name` are intentionally omitted.
+// Card description is free-text content; assignee full names are PII. The
+// model receives stable IDs instead so it can reference the entity without
+// reading its contents or identifying who is behind it.
 function shapeCoreCard(card: kaiten.Card) {
   return {
     id: card.id,
     title: card.title,
-    description: card.description,
     board: card.board?.title ?? card.board_id,
     column: card.column?.title ?? card.column_id,
     lane: card.lane?.title ?? card.lane_id,
-    owner: card.owner?.full_name ?? card.owner_id,
+    owner_id: card.owner_id,
     type: card.type?.name ?? card.type_id,
     state: card.state,
     condition: card.condition,
@@ -40,23 +43,23 @@ function shapeCardTimes(card: kaiten.Card) {
   };
 }
 
+// PRIVACY: member full names, checklist item text, and custom property
+// values are stripped. Checklists commonly store acceptance criteria as
+// item.text; custom properties frequently carry AC prose too. We expose the
+// structural shell — how many items exist, how many are checked — so the
+// model can report progress without reading the criteria themselves.
 function shapeCardMembersTagsProps(card: kaiten.Card) {
   return {
     members: card.members?.map((m) => ({
       id: m.id,
-      name: m.full_name,
       type: m.type, // 1=member, 2=responsible
     })),
     tags: card.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })),
-    properties: card.properties,
     checklists: card.checklists?.map((cl) => ({
       id: cl.id,
       name: cl.name ?? cl.title,
-      items: cl.items?.map((i) => ({
-        id: i.id,
-        text: i.text,
-        checked: i.checked,
-      })),
+      items_total: cl.items?.length ?? 0,
+      items_checked: cl.items?.filter((i) => i.checked).length ?? 0,
     })),
   };
 }
@@ -73,22 +76,24 @@ function shapeBlockerList(blockers: kaiten.Blocker[]) {
   }));
 }
 
+// PRIVACY: `description` is user-written prose — stripped. URL itself is
+// metadata (where the link points), not card content.
 function shapeExternalLinks(links: kaiten.ExternalLink[]) {
   return links.map((l) => ({
     id: l.id,
     url: l.url,
-    description: l.description,
   }));
 }
 
+// PRIVACY: `user.full_name` (PII) and `comment` (user-written prose) are
+// stripped. Time attribution is by stable user_id.
 function shapeTimeLogs(logs: kaiten.TimeLog[]) {
   return logs.map((t) => ({
     id: t.id,
-    user: t.user?.full_name ?? t.user_id,
+    user_id: t.user_id,
     role: t.role?.name,
     time_spent_minutes: t.time_spent,
     for_date: t.for_date,
-    comment: t.comment,
   }));
 }
 
@@ -114,16 +119,12 @@ function shapeCardRelations(card: kaiten.Card, children: kaiten.Card[]) {
   };
 }
 
-function shapeComments(comments: kaiten.Comment[]) {
-  return comments.map((c) => ({
-    id: c.id,
-    author: c.author?.full_name,
-    date: c.created,
-    text: c.text,
-    edited: c.edited,
-  }));
-}
+// PRIVACY: card comments are not exposed at all — neither fetched nor shaped.
+// The /cards/{id}/comments endpoint is intentionally unreachable from any
+// tool (the endpoint wrapper was removed from kaiten/endpoints.ts).
 
+// PRIVACY: location history `author.full_name` is stripped. Stable author_id
+// lets the model see "someone moved the card" without identifying them.
 function shapeLocationHistory(history: kaiten.LocationHistory[]) {
   return history.map((h) => ({
     column: h.column_title,
@@ -131,13 +132,12 @@ function shapeLocationHistory(history: kaiten.LocationHistory[]) {
     lane_id: h.lane_id,
     condition: h.condition,
     date: h.changed ?? h.created,
-    author: h.author?.full_name,
+    author_id: h.author?.id,
   }));
 }
 
 interface CardDetailInputs {
   card: kaiten.Card;
-  comments: kaiten.Comment[];
   children: kaiten.Card[];
   blockers: kaiten.Blocker[];
   externalLinks: kaiten.ExternalLink[];
@@ -153,7 +153,6 @@ function assembleCardDetail(x: CardDetailInputs) {
     blockers: shapeBlockerList(x.blockers),
     external_links: shapeExternalLinks(x.externalLinks),
     time_logs: shapeTimeLogs(x.timeLogs),
-    comments: shapeComments(x.comments),
     ...shapeCardRelations(x.card, x.children),
     location_history: shapeLocationHistory(x.history),
   };
@@ -165,16 +164,15 @@ function registerGetCard(server: McpServer): void {
     {
       title: "Get Card Details",
       description:
-        "Get full card details: description, comments, checklists, blockers, children, parents, external links, files, time logs, custom properties, location history.",
+        "Get card metadata: board/column/lane placement, state, dates, size, tags, checklist progress (counts only), blockers, children, parents, external links (URLs only), files, time logs, location history. PRIVACY: card description, comments, assignee full names, and checklist item text are intentionally NOT returned — the connector exposes structural metadata only.",
       inputSchema: z.object({
         card_id: z.coerce.number().int().positive().describe("Card ID"),
       }),
     },
     async ({ card_id }) => {
-      const [card, comments, children, blockers, externalLinks, timeLogs, history] =
+      const [card, children, blockers, externalLinks, timeLogs, history] =
         await Promise.all([
           kaiten.getCard(card_id),
-          kaiten.getCardComments(card_id).catch(() => [] as kaiten.Comment[]),
           kaiten.getCardChildren(card_id).catch(() => [] as kaiten.Card[]),
           kaiten.getCardBlockers(card_id).catch(() => [] as kaiten.Blocker[]),
           kaiten
@@ -189,7 +187,6 @@ function registerGetCard(server: McpServer): void {
       return textResult(
         assembleCardDetail({
           card,
-          comments,
           children,
           blockers,
           externalLinks,

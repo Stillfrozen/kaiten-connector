@@ -5,7 +5,6 @@ import type {
   Card,
   CardMember,
   Column,
-  Comment,
   ExternalLink,
   Lane,
   LocationHistory,
@@ -16,6 +15,10 @@ import type {
   TimeLog,
   User,
 } from "./types.js";
+// PRIVACY: `Comment` type is intentionally NOT imported here and no
+// `getCardComments` wrapper is exposed. Card comments are free-text user
+// content and the connector must not surface them to the model. If this
+// ever needs to change, it requires an explicit product/security review.
 
 // --- Spaces & Boards ---
 
@@ -128,10 +131,6 @@ export async function getCards(params: GetCardsParams): Promise<Card[]> {
 
 export async function getCard(cardId: number): Promise<Card> {
   return api<Card>(`/cards/${cardId}`);
-}
-
-export async function getCardComments(cardId: number): Promise<Comment[]> {
-  return api<Comment[]>(`/cards/${cardId}/comments`);
 }
 
 export async function getCardChildren(cardId: number): Promise<Card[]> {

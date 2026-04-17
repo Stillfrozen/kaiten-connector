@@ -23,7 +23,8 @@ function shapeSprintCardRow(c: kaiten.Card) {
     id: c.id,
     title: c.title,
     column: c.column?.title ?? c.column_id,
-    members: c.members?.map((m) => m.full_name) ?? [],
+    // PRIVACY: full names stripped; stable ids only.
+    members: c.members?.map((m) => m.id) ?? [],
     size: c.size,
   };
 }

@@ -62,10 +62,12 @@ function shapeBoardDetails(
   lanes: kaiten.Lane[]
 ) {
   return {
+    // PRIVACY: board.description stripped for consistency with the global
+    // "no free-text content" rule, even though it usually contains only
+    // team-meta notes.
     board: {
       id: board.id,
       title: board.title,
-      description: board.description,
       external_id: board.external_id,
     },
     columns: columns.map((c) => ({

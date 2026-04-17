@@ -54,12 +54,15 @@ function collectBlocked(cards: kaiten.Card[]): BlockedCardRow[] {
 }
 
 interface WorkloadReport {
-  members: { member: string; cards: number; overloaded: boolean }[];
+  members: { member_id: number; cards: number; overloaded: boolean }[];
   unassigned: number;
 }
 
+// PRIVACY: aggregated by stable member_id, never by full_name. The model
+// sees workload distribution and overloaded assignees without learning
+// their identities.
 function computeWorkload(cards: kaiten.Card[]): WorkloadReport {
-  const memberMap = new Map<string, number>();
+  const memberMap = new Map<number, number>();
   let unassigned = 0;
   for (const card of cards) {
     if (!card.members || card.members.length === 0) {
@@ -67,12 +70,12 @@ function computeWorkload(cards: kaiten.Card[]): WorkloadReport {
       continue;
     }
     for (const m of card.members) {
-      memberMap.set(m.full_name, (memberMap.get(m.full_name) ?? 0) + 1);
+      memberMap.set(m.id, (memberMap.get(m.id) ?? 0) + 1);
     }
   }
   const members = [...memberMap.entries()]
-    .map(([name, count]) => ({
-      member: name,
+    .map(([id, count]) => ({
+      member_id: id,
       cards: count,
       overloaded: count > 10,
     }))
